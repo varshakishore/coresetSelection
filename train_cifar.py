@@ -13,6 +13,7 @@ import time
 from resnet import ResNet18, ResNet50
 from cifar_models import ConvNet
 from data_prepare import *
+from logger import set_logger
 
 parser = argparse.ArgumentParser(description='Train CIFAR model')
 parser.add_argument('--data_root', type=str, default='data', help='CIFAR data root')
@@ -26,7 +27,9 @@ parser.add_argument('--batch_size', type=int, default=100, help='batch size')
 parser.add_argument('--seed', type=int, default=0, help='random seed')
 args = parser.parse_args()
 
-print(args)
+logger = set_logger("", "{}/log_{}_{}_seed_{}.txt".format(args.save_dir, args.dataset, args.model, args.seed))
+
+logger(args)
 if args.dataset == 'cifar10':
     transform_train = cifar_transform_train
     transform_test = cifar_transform_test
@@ -42,7 +45,7 @@ elif args.dataset == 'cifar100':
     num_classes = 100
     input_size =  32
 else:
-    print("unknown dataset")
+    logger("unknown dataset")
     exit()
 linear_base = input_size * input_size / 2
 
@@ -69,7 +72,7 @@ criterion = nn.CrossEntropyLoss()
 torch.manual_seed(args.seed)
 
 def train(epoch, optimizer):
-    print('\nEpoch: %d' % epoch)
+    logger('\nEpoch: %d' % epoch)
     net.train()
     train_loss = 0
     correct = 0
@@ -85,7 +88,7 @@ def train(epoch, optimizer):
         _, predicted = outputs.max(1)
         total += targets.size(0)
         correct += predicted.eq(targets).sum().item()
-    print('==>>> train loss: {:.6f}, accuracy: {:.4f}'.format(train_loss/(batch_idx+1), 100.*correct/total))
+    logger('==>>> train loss: {:.6f}, accuracy: {:.4f}'.format(train_loss/(batch_idx+1), 100.*correct/total))
 
 def test(epoch=-1):
     global best_acc
@@ -102,7 +105,7 @@ def test(epoch=-1):
             _, predicted = outputs.max(1)
             total += targets.size(0)
             correct += predicted.eq(targets).sum().item()
-        print('==>>> test loss: {:.6f}, accuracy: {:.4f}'.format(test_loss/(batch_idx+1), 100.*correct/total))
+        logger('==>>> test loss: {:.6f}, accuracy: {:.4f}'.format(test_loss/(batch_idx+1), 100.*correct/total))
 
     # Save checkpoint.
     acc = 100.*correct/total
@@ -138,7 +141,7 @@ for epoch in range(args.epochs):
             g['lr'] *= 0.1
         second_drop = True
 
-print(best_acc)
+logger(best_acc)
 state = {
     'net': net.state_dict(),
     'epoch': args.epochs,
