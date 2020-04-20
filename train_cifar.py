@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torchvision
 from torchvision import datasets, transforms
+import numpy as np
 
 import os
 import argparse
@@ -25,11 +26,13 @@ parser.add_argument('--epochs', type=int, default=150, help='number of training 
 parser.add_argument('--lr', type=float, default=0.001, help='learning rate')
 parser.add_argument('--batch_size', type=int, default=100, help='batch size')
 parser.add_argument('--seed', type=int, default=0, help='random seed')
+parser.add_argument('--cpr', type=float, default=1.0, help='compression ratio of the dataset')
+parser.add_argument('--cpr_seed', type=int, default=0, help='seed for random compression')
 args = parser.parse_args()
 
-logger = set_logger("", "{}/log_{}_{}_seed_{}.txt".format(args.save_dir, args.dataset, args.model, args.seed))
+logger = set_logger("", "{}/log_{}_{}_seed_{}_cpr_{}_cpr_seed_{}.txt".format(args.save_dir, args.dataset, args.model, args.seed, args.cpr, args.cpr_seed))
 
-logger(args)
+logger.info(args)
 if args.dataset == 'cifar10':
     transform_train = cifar_transform_train
     transform_test = cifar_transform_test
@@ -45,10 +48,17 @@ elif args.dataset == 'cifar100':
     num_classes = 100
     input_size =  32
 else:
-    logger("unknown dataset")
+    logger.info("unknown dataset")
     exit()
 linear_base = input_size * input_size / 2
 
+torch.manual_seed(args.cpr_seed)
+if args.cpr < 1:
+    rand_perm = torch.randperm(len(trainset))
+    trainset.data = trainset.data[rand_perm[:int(len(trainset) * args.cpr)]]
+    trainset.targets = (np.array(trainset.targets)[rand_perm[:len(trainset)]]).tolist()
+
+torch.manual_seed(args.seed)
 trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=2)
 testloader = torch.utils.data.DataLoader(testset, batch_size=args.batch_size, shuffle=False, num_workers=2)
 
@@ -69,10 +79,9 @@ if args.saved_model != '':
     
 net = net.to(device)
 criterion = nn.CrossEntropyLoss()
-torch.manual_seed(args.seed)
 
 def train(epoch, optimizer):
-    logger('\nEpoch: %d' % epoch)
+    logger.info('\nEpoch: %d' % epoch)
     net.train()
     train_loss = 0
     correct = 0
@@ -88,7 +97,7 @@ def train(epoch, optimizer):
         _, predicted = outputs.max(1)
         total += targets.size(0)
         correct += predicted.eq(targets).sum().item()
-    logger('==>>> train loss: {:.6f}, accuracy: {:.4f}'.format(train_loss/(batch_idx+1), 100.*correct/total))
+    logger.info('==>>> train loss: {:.6f}, accuracy: {:.4f}'.format(train_loss/(batch_idx+1), 100.*correct/total))
 
 def test(epoch=-1):
     global best_acc
@@ -105,7 +114,7 @@ def test(epoch=-1):
             _, predicted = outputs.max(1)
             total += targets.size(0)
             correct += predicted.eq(targets).sum().item()
-        logger('==>>> test loss: {:.6f}, accuracy: {:.4f}'.format(test_loss/(batch_idx+1), 100.*correct/total))
+        logger.info('==>>> test loss: {:.6f}, accuracy: {:.4f}'.format(test_loss/(batch_idx+1), 100.*correct/total))
 
     # Save checkpoint.
     acc = 100.*correct/total
@@ -117,7 +126,7 @@ def test(epoch=-1):
         }
         if not os.path.isdir('checkpoint'):
             os.mkdir('checkpoint')
-        torch.save(state, '%s/%s_%s_seed_%d.pth' % (args.save_dir, args.dataset, args.model, args.seed))
+        torch.save(state, '{}/{}_{}_seed_{}_cpr_{}_cpr_seed_{}.pth'.format(args.save_dir, args.dataset, args.model, args.seed, args.cpr, args.cpr_seed))
         best_acc = acc
 
 
@@ -141,11 +150,11 @@ for epoch in range(args.epochs):
             g['lr'] *= 0.1
         second_drop = True
 
-logger(best_acc)
+logger.info(best_acc)
 state = {
     'net': net.state_dict(),
     'epoch': args.epochs,
 }
 if not os.path.isdir('checkpoint'):
     os.mkdir('checkpoint')
-torch.save(state, '%s/%s_%s_seed_%d.pth' % (args.save_dir, args.dataset, args.model, args.seed))
+torch.save(state, '{}/{}_{}_seed_{}_cpr_{}_cpr_seed_{}.pth'.format(args.save_dir, args.dataset, args.model, args.seed, args.cpr, args.cpr_seed))
